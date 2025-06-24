@@ -1,3 +1,4 @@
+from flask_cors import CORS
 from flask import Flask, jsonify
 import pandas as pd
 import pickle
@@ -16,6 +17,7 @@ import os
 from feature_names import feature_names
 
 app = Flask(__name__)
+CORS(app)
 
 data_path = os.path.join("data", "trials.pkl")
 stats_path = os.path.join("data", "stats.pkl")
