@@ -1,0 +1,15 @@
+FROM python:3.13
+
+WORKDIR /study-results/api
+
+COPY requirements.txt app.py .env ./
+RUN find . -type f
+RUN pip install -r ./requirements.txt
+ENV FLASK_ENV=production
+
+COPY . .
+
+
+
+EXPOSE 5000
+CMD ["gunicorn", "-b", "0.0.0.0:5000", "app:app"]

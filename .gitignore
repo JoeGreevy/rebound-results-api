@@ -1,0 +1,4 @@
+data/stats.pkl
+data/trials.pkl
+test_scripts
+__pycache__
