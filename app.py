@@ -1,5 +1,5 @@
 from flask_cors import CORS
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 import pandas as pd
 import pickle
 import numpy as np
@@ -21,6 +21,7 @@ CORS(app)
 
 data_path = os.path.join("data", "trials.pkl")
 stats_path = os.path.join("data", "stats.pkl")
+meta_path = os.path.join("data", "meta.json")
 if not os.path.exists(data_path):
     url = "https://drive.google.com/uc?export=download&id=1oBT_fpumQCN3xdz0mm23QKd5vFCZAkXi"
     output = data_path
@@ -31,7 +32,12 @@ if not os.path.exists(stats_path):
     output = stats_path
     gdown.download(url, output, quiet=False)
 
-if os.path.exists(data_path) and os.path.exists(stats_path):
+if not os.path.exists(meta_path):
+    url = "https://drive.google.com/uc?export=download&id=1lHG313i73ep0C1XE7k1I-AuNvCnJFjOs"
+    output = meta_path
+    gdown.download(url, output, quiet=False)
+
+if os.path.exists(data_path) and os.path.exists(stats_path and os.path.exists(meta_path)):
     print("Results successfully downloaded")
     with open(data_path, 'rb') as f:
         subjects = pickle.load(f)  # or use pd.read_pickle('data.pkl')
@@ -40,21 +46,36 @@ if os.path.exists(data_path) and os.path.exists(stats_path):
         stats = pickle.load(f)
         for df in stats.values():
             df["xxx"] = np.zeros(len(df))
+    
+    meta_df = pd.read_json(meta_path)
 else:
     print("Results failed to download")
 
 
 
-@app.route('/api/ids')
+@app.route('/api/ids', methods=['POST'])
 def get_ids():
-    print("Fetching IDs")
-    return {'ids': [subj.id for subj in subjects]}
+    filters = request.get_json()
+    # if not filters:
+    #     return {'ids': [subj.id for subj in subjects]}
+    
+    out = meta_df.copy()
+    for subj in meta_df.itertuples(index=True, name='Row'):
+        if not set(subj.tags).intersection(filters):
+            out = out.drop(subj.Index)
+    return jsonify(out.to_dict(orient='records'))
 
-@app.route('/api/subjects/results')
+
+
+@app.route('/api/subjects/results', methods=['POST'])
 def get_results():
     res = stats.copy()
+    ids = request.get_json()
+    print(ids)
     for df in res.keys():
-        res[df] = res[df].to_dict(orient="dict")
+        s_df = res[df]
+        s_df = s_df[s_df.index.isin(ids)].to_dict(orient="dict")
+        res[df] = s_df
     return jsonify(res)
 
 @app.route('/api/download_csv/<id>/<features>')
