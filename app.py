@@ -71,7 +71,6 @@ def get_ids():
 def get_results():
     res = stats.copy()
     ids = request.get_json()
-    print(ids)
     for df in res.keys():
         s_df = res[df]
         s_df = s_df[s_df.index.isin(ids)].to_dict(orient="dict")
@@ -114,11 +113,14 @@ def get_mass(id):
 @app.route('/api/subjects/<id>/<features>')
 def get_subject(id, features):
     print(f"Fetching {id}")
-    feats = features.split('-')
+    feats = features.split('--')
+    feats.insert(0, "idx")
+    feats.insert(0, "start_time")
     
     for subj in subjects:
         if subj.id == id:
-            jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
+            jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1] 
+            # ^ Note going through just the trial jumps
             jump_dict = {
                 feat : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
                 for feat in feats

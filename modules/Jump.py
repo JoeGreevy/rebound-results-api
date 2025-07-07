@@ -29,54 +29,51 @@ class Jump:
     # integ_conc - integral for concentric portion
 
     def __init__(self, idx, inds, subject):
-        self.idx = idx # Jump Object Idx
-        self.subject = subject
+        self.idx = idx # Jump Object Idx - crap
         
+        self.subject = subject # Dependecy Injection
+        
+        # Landing and Take-Off Indices
         self.gc_i = [inds[0], inds[2]] # Landing Indices
         self.t_i = inds[1] # Take_Off Inds
+
+        self.agg_f_series = self.set_agg_f_series()
+        self.res_f = self.agg_f_series - (9.81* self.subject.mass)
+        self.ft = self.set_ft()
+        self.gct = self.set_gct()
+        self.peak_loc_ind = self.set_peak_loc_ind()
+        
+        self.time = self.set_time() # array of time-points - bit silly to be storing in memory
+        self.temp = self.set_temp() # indices and lengths [t] t refers to kinetic sample rate
+        self.start_time = self.gc_i[0] / self.subject.time["force"]["fs"] # Start time of jump in seconds
+
+        
+        self.rsi = self.ft / self.gct
+        self.jh = 1/2*9.81*(self.ft/2)**2
+        self.rsi_adj = self.jh / self.gct
         
 
-        self.markers = {
-            "toe" : {
-                side : {
-                    "z": [],
-                    #"occ": [],
-                    "visibility": [],
-                    "occlusions": [],
-                    "min": [],
-                    "min_ind": [], # with respect to gc_i
-                    "max": [],
-                    "max_ind": []
-                } for side in ["left", "right"]
-            },
-            "heel" : {
-                side : {
-                    "z": [],
-                    "occ": [],
-                    "visibility": [],
-                    "occlusions": [],
-                    "min": [],
-                    "min_ind": [], # with respect to gc_i
-                    "max": [],
-                    "max_ind": []
-                } for side in ["left", "right"]
-            },
-            "thigh" : {
-                side: {
-                    "x" : [],
-                    "y" : [],
-                    "z" : [],
-                    "occ": [],
-                    "visibility" : [],
-                    "occlusions": [],
-                    "min": [],
-                    "max": [],
-                    "max_ind": [],
-                    "min_ind": []
-                } for side, l in zip(["left", "right"], ["L", "R"])
-            }
-        }
+
+        self.force_dict = self.set_force_dict() # Lots of force features
+
+
+        self.total_impulse = np.trapz(self.res_f[:self.temp["f"]["gc_l"]+1], dx=1/2000) # Ns
+        self.vel_change = self.total_impulse / self.subject.mass # m/s
+        self.avg_res_force = self.total_impulse / self.gct # N
+
+        ## Should just be using self.temp["t"]["j_inds"]
+        # self.forces = self.set_forces()
+        # self.anat_locs = self.set_anat_locs(subject)
+        self.active_plates = self.set_active_plates()
         
+        #self.integ = self.set_integ()
+
+        ## Functions called after link_segment is defined in the trial
+        # get_kinetic_features()
+        # get_kinematic_features()
+        # get_force_features()
+
+        self.weight_dist = -1 # -1 unset, 0 muddled, 1 split
         self.angle_dict = {
             "foot" : {
                 side : {
@@ -86,37 +83,6 @@ class Jump:
         }
 
 
-        self.agg_f_series = self.set_agg_f_series()
-        self.res_f = self.agg_f_series - (9.81* self.subject.mass)
-        self.ft = self.set_ft()
-        self.gct = self.set_gct()
-        self.peak_loc_ind = self.set_peak_loc_ind()
-        
-        self.time = self.set_time()
-        self.temp = self.set_temp()
-        
-        self.rsi = self.ft / self.gct
-        self.jh = 1/2*9.81*(self.ft/2)**2
-        self.rsi_adj = self.jh / self.gct
-        
-
-
-        self.force_dict = self.set_force_dict()
-        # force_dict[peak][f]
-        # force_dict["avg"]
-        self.total_impulse = np.trapz(self.res_f[:self.temp["f"]["gc_l"]+1], dx=1/2000) # Ns
-        self.vel_change = self.total_impulse / self.subject.mass # m/s
-        self.avg_res_force = self.total_impulse / self.gct # N
-
-        self.forces = self.set_forces()
-        self.active_plates = self.set_active_plates()
-
-        self.anat_locs = self.set_anat_locs(subject)
-        self.foot_dists = self.set_foot_dists()
-
-        self.weight_dist = -1 # -1 unset, 0 muddled, 1 split
-        
-        self.integ = self.set_integ()
     
     def get_kinetic_features(self):
         sides = ["left", "right"]
@@ -127,33 +93,36 @@ class Jump:
         t_inds = np.arange(self.temp["t"]["gc_i"][0], self.temp["t"]["t_i"]+1)
         N = len(t_inds)
 
+        # Kinetic Features for both sides
+        # Moment, Powers, RF
         kinetics = {
             "moments" : {
                 "ankle" : {
                     side : {
-                        "peak" : np.max(ls["foot"][side]["prox"]["M"][t_inds]) / self.subject.mass,
-                        "peak_loc" : np.argmax(ls["foot"][side]["prox"]["M"][t_inds]) / N,
+                        "A1" : np.max(ls["foot"][side]["prox"]["M"][t_inds]) / self.subject.mass,
+                        "A1_loc" : np.argmax(ls["foot"][side]["prox"]["M"][t_inds]) / N,
                         "avg" : np.mean(ls["foot"][side]["prox"]["M"][t_inds]) / self.subject.mass,
                     } for side in sides
                 },
                 "knee" : {
                     side : {
-                        "init_peak" : np.max(ls["shank"][side]["prox"]["M"][t_inds[:N//4]]) / self.subject.mass,
-                        "init_min" : np.min(ls["shank"][side]["prox"]["M"][t_inds[N//10:N//3]]) / self.subject.mass,
-                        "init_min_loc" : (np.argmin(ls["shank"][side]["prox"]["M"][t_inds[N//10:N//3]]) + N//10) / N,
-                        "mid_peak" : np.max(ls["shank"][side]["prox"]["M"][t_inds[N//4:]]) / self.subject.mass,
-                        "mid_peak_loc" : (np.argmax(ls["shank"][side]["prox"]["M"][t_inds[N//4:]]) + N//4) / N,
-                        "end_min": np.min(ls["shank"][side]["prox"]["M"][t_inds[N*4//5:]]) / self.subject.mass,
-                        "end_min_loc": (np.argmin(ls["shank"][side]["prox"]["M"][t_inds[N*4//5:]]) + N*4//5) / N,
+                        "K1" : np.max(ls["shank"][side]["prox"]["M"][t_inds[:N//4]]) / self.subject.mass,
+                        "K1_loc" : np.argmax(ls["shank"][side]["prox"]["M"][t_inds[:N//4]]) / N,
+                        "K2" : np.min(ls["shank"][side]["prox"]["M"][t_inds[N//10:N//3]]) / self.subject.mass,
+                        "K2_loc" : (np.argmin(ls["shank"][side]["prox"]["M"][t_inds[N//10:N//3]]) + N//10) / N,
+                        "K3" : np.max(ls["shank"][side]["prox"]["M"][t_inds[N//4:]]) / self.subject.mass,
+                        "K3_loc" : (np.argmax(ls["shank"][side]["prox"]["M"][t_inds[N//4:]]) + N//4) / N,
+                        "K4": np.min(ls["shank"][side]["prox"]["M"][t_inds[N*4//5:]]) / self.subject.mass,
+                        "K4_loc": (np.argmin(ls["shank"][side]["prox"]["M"][t_inds[N*4//5:]]) + N*4//5) / N,
                         "avg" : np.mean(ls["shank"][side]["prox"]["M"][t_inds]) / self.subject.mass,
                     } for side in sides
                 },
                 "hip": {
                     side : {
-                        "init_f_peak" : np.min(ls["thigh"][side]["prox"]["M"][t_inds[:N//4]]) / self.subject.mass,
-                        "init_f_loc" : np.argmin(ls["thigh"][side]["prox"]["M"][t_inds[:N//4]]) / N,
-                        "peak" : np.max(ls["thigh"][side]["prox"]["M"][t_inds] / self.subject.mass),
-                        "peak_loc" : np.argmax(ls["thigh"][side]["prox"]["M"][t_inds]) / N,
+                        "H1" : np.min(ls["thigh"][side]["prox"]["M"][t_inds[:N//4]]) / self.subject.mass,
+                        "H1_loc" : np.argmin(ls["thigh"][side]["prox"]["M"][t_inds[:N//4]]) / N,
+                        "H2" : np.max(ls["thigh"][side]["prox"]["M"][t_inds] / self.subject.mass),
+                        "H2_loc" : np.argmax(ls["thigh"][side]["prox"]["M"][t_inds]) / N,
                         "avg" : np.mean(ls["thigh"][side]["prox"]["M"][t_inds]) / self.subject.mass,
                     } for side in sides
                 }
@@ -186,6 +155,7 @@ class Jump:
                 } for side in sides
             } 
         }
+        
         for joint, seg in zip(joints, segments):
             for side in sides:
                 m = ls[seg][side]["prox"]["M"][t_inds]
@@ -211,6 +181,7 @@ class Jump:
         elif self.subject.id[-1] == "106":
             sides2 = ["right", "right"]
 
+        # Leg Stiffness Measures
         thigh_dict = {
             side : np.mean(self.subject.markers["thigh"][side]["z"][thigh_inds, :], axis=1) for side in sides2
         }
@@ -227,7 +198,7 @@ class Jump:
             # phase_shift = "f_loc" - "h_loc" how much later is the force peak than the height peak
         }
 
-        # Combined Moments, Powers and Stiffnesses
+        ## Combined Moments and Powers across legs
         for joint in joints:
             kinetics["moments"][joint]["total"] = {}
             kinetics["moments"][joint]["difference"] = {}
@@ -238,12 +209,12 @@ class Jump:
                 else:
                     valid_sides = ["right", "right"]
 
-
             for key in kinetics["moments"][joint]["left"]:
                 stat_arr = [kinetics["moments"][joint][s][key] for s in valid_sides]
                 kinetics["moments"][joint]["total"][key] = np.mean(stat_arr)
                 kinetics["moments"][joint]["difference"][key] = np.diff(stat_arr)[0]
 
+            # Powers is just moments repeated
             kinetics["power"][joint]["total"] = {}
             kinetics["power"][joint]["difference"] = {}
             for key in kinetics["power"][joint]["left"]:
@@ -252,16 +223,16 @@ class Jump:
                 kinetics["power"][joint]["total"][key] = np.mean(stat_arr)
                 kinetics["power"][joint]["difference"][key] = np.diff(stat_arr)[0]
 
-            kinetics["stiffness"][joint]["total"] = {}
-            kinetics["stiffness"][joint]["difference"] = {}
-            for key in ["k", "M"]:
-                stat_arr = [kinetics["stiffness"][joint][s][key] for s in valid_sides]
+            # kinetics["stiffness"][joint]["total"] = {}
+            # kinetics["stiffness"][joint]["difference"] = {}
+            # for key in ["k", "M"]:
+            #     stat_arr = [kinetics["stiffness"][joint][s][key] for s in valid_sides]
 
-                kinetics["stiffness"][joint]["total"][key] = np.mean(stat_arr)
-                kinetics["stiffness"][joint]["difference"][key] = np.diff(stat_arr)[0]
-            for key in ["mom_loc", "ang_loc", "a"]:
-                stat_arr = [kinetics["stiffness"][joint][s][key] for s in valid_sides]
-                kinetics["stiffness"][joint]["total"][key] = np.sum(stat_arr) / 2
+            #     kinetics["stiffness"][joint]["total"][key] = np.mean(stat_arr)
+            #     kinetics["stiffness"][joint]["difference"][key] = np.diff(stat_arr)[0]
+            # for key in ["mom_loc", "ang_loc", "a"]:
+            #     stat_arr = [kinetics["stiffness"][joint][s][key] for s in valid_sides]
+            #     kinetics["stiffness"][joint]["total"][key] = np.sum(stat_arr) / 2
 
         kinetics["rf"]["total"] = {
             "peak" : kinetics["rf"]["left"]["peak"] + kinetics["rf"]["right"]["peak"],
@@ -270,25 +241,22 @@ class Jump:
             "peak" : kinetics["rf"]["left"]["peak"] - kinetics["rf"]["right"]["peak"],
             "loc" : kinetics["rf"]["left"]["loc"] - kinetics["rf"]["right"]["loc"],
         }
-        total_support = np.sum([kinetics["moments"][joint]["total"]["avg"] for joint in joints])
-        total_concentric = np.sum([kinetics["power"][joint]["total"]["work_conc"] for joint in joints])
-        total_eccentric = np.sum([kinetics["power"][joint]["total"]["work_ecc"] for joint in joints])
-        kinetics["relative"] = {
-            "support" : {
-                joint : kinetics["moments"][joint]["total"]["avg"] / total_support for joint in joints
-            },
-            "concentric" : {
-                joint : kinetics["power"][joint]["total"]["work_conc"] / total_concentric for joint in joints
-            },
-            "eccentric" : {
-                joint : kinetics["power"][joint]["total"]["work_ecc"] / total_eccentric for joint in joints
-            }
-        }
-        for joint in joints:
-            kinetics["relative"][joint] = kinetics["power"][joint]["total"]["work_conc"] / (kinetics["power"][joint]["total"]["work_conc"] + abs(kinetics["power"][joint]["total"]["work_ecc"]))
 
+        # The relative features but now moved into "moments" and "power"
+        for side in ["total", "left", "right"]:
+            total_support = np.sum([kinetics["moments"][joint][side]["avg"] for joint in joints])
+            total_concentric = np.sum([kinetics["power"][joint][side]["work_conc"] for joint in joints])
+            total_eccentric = np.sum([kinetics["power"][joint][side]["work_ecc"] for joint in joints])
+            for joint in joints:
+                kinetics["power"][joint][side]["relative"] = {
+                    "conc_prop" : kinetics["power"][joint][side]["work_conc"] / (kinetics["power"][joint][side]["work_conc"] + abs(kinetics["power"][joint][side]["work_ecc"])),
+                    "concentric" :  kinetics["power"][joint][side]["work_conc"] / total_concentric,
+                    "eccentric" :  kinetics["power"][joint][side]["work_ecc"] / total_eccentric 
+                }
 
-
+                kinetics["moments"][joint][side]["relative"] = {
+                    "support" :  kinetics["moments"][joint][side]["avg"] / total_support, 
+                }
 
         self.kinetics = kinetics
 
@@ -358,17 +326,23 @@ class Jump:
         # subjects tend to take off with less kinetic energy that they land with.
         # ecc_imp = np.trapz(F[:peak_disp_ind], dx=1/2000) # N*m
         # conc_imp = np.trapz(F[peak_disp_ind:], dx=1/2000) # N*m
-        avg_ecc = np.sum(F[:peak_disp_ind]) / len(F[:peak_disp_ind])
-        avg_conc = np.sum(F[peak_disp_ind:]) / len(F[peak_disp_ind:])
+        if len(F[:peak_disp_ind]) == 0 or len(F[peak_disp_ind:]) == 0:
+            avg_ecc = 0
+            avg_conc = 0
+            loc_p_rfd, loc_min_rfd, rates = 0, 0, [0, 1]
 
-        # Rate of Force Development
-        f_10_ms = F[::20] # 10 ms intervals
-        self.rates = ((f_10_ms[3:] - f_10_ms[:-3]) / 0.03) # N/s
-        self.rates /= (self.subject.mass * 9.81) # BW/s
-        rates= self.rates
+        else:
+            avg_ecc = np.sum(F[:peak_disp_ind]) / len(F[:peak_disp_ind])
+            avg_conc = np.sum(F[peak_disp_ind:]) / len(F[peak_disp_ind:])
 
-        loc_p_rfd = (np.argmax(rates) * 0.01 + 0.01) / self.gct
-        loc_min_rfd = (np.argmin(rates) * 0.01 + 0.01) / self.gct
+            # Rate of Force Development
+            f_10_ms = F[::20] # 10 ms intervals
+            self.rates = ((f_10_ms[3:] - f_10_ms[:-3]) / 0.03) # N/s
+            self.rates /= (self.subject.mass * 9.81) # BW/s
+            rates= self.rates
+
+            loc_p_rfd = (np.argmax(rates) * 0.01 + 0.01) / self.gct
+            loc_min_rfd = (np.argmin(rates) * 0.01 + 0.01) / self.gct
 
 
         self.force = {
@@ -393,7 +367,7 @@ class Jump:
         return self.subject.force["z"]["agg"][inds[0]:inds[1]]
     
     def set_ft(self):
-        return (self.gc_i[1] - self.t_i) / self.subject.fs_force # Flight Time
+        return (self.gc_i[1] - self.t_i) / self.subject.time["force"]["fs"] # Flight Time
     
     def set_peak_loc_ind(self):
         return np.argmax(self.agg_f_series)
@@ -404,7 +378,6 @@ class Jump:
         t_gc_i = np.round(np.array(self.gc_i) / ds).astype(int)
         t_t_i = round(self.t_i / ds)
         t_peak_ind = round(self.peak_loc_ind / ds)
-        peak_ind = self.peak_loc_ind
         temp_dict = {
             "f" : {
                 "gc_i": self.gc_i,
@@ -414,7 +387,8 @@ class Jump:
                 "gc_l": self.t_i - self.gc_i[0],
                 "f_l": self.gc_i[1] - self.t_i,
                 "ecc_l": self.peak_loc_ind,
-                "conc_l": (self.t_i - self.gc_i[0] - self.peak_loc_ind)
+                "conc_l": (self.t_i - self.gc_i[0] - self.peak_loc_ind),
+                "j_inds": np.arange(self.gc_i[0], self.t_i+1),
             },
             "t" : {
                 "gc_i": t_gc_i,
@@ -432,10 +406,13 @@ class Jump:
         return temp_dict
 
     def set_force_dict(self):
+        """
+        Aggregated Force Features: integ, avg, peak
+        """
         peak_ind = np.argmax(self.agg_f_series)
         peak = np.max(self.agg_f_series)
-        ecc_t = peak_ind / self.subject.fs_force
-        conc_t = (self.temp["f"]["gc_l"] - peak_ind) / self.subject.fs_force
+        ecc_t = peak_ind / self.subject.time["force"]["fs"] 
+        conc_t = (self.temp["f"]["gc_l"] - peak_ind) / self.subject.time["force"]["fs"] 
         half_max = peak / 2
         fwhm_inds = np.flatnonzero(self.agg_f_series > half_max)
         weight = self.subject.mass * 9.81
@@ -449,9 +426,8 @@ class Jump:
             "peak": {
                 "f" : self.agg_f_peak,
                 "ind" : peak_ind,
-                "ttp" : peak_ind / self.subject.fs_force,
+                "ttp" : peak_ind / self.subject.time["force"]["fs"],
                 "rel_ttp": peak_ind / self.temp["f"]["gc_l"],
-                "plates": np.max(self.ts_forces, axis=0)
             },
             "ecc": {
                 "int" : ecc_int,
@@ -492,130 +468,58 @@ class Jump:
         }
         return force_dict
 
-    def set_forces(self):
-        ds = 2 # downsample factor previously 10
-        forces = {
-            "cop" : {
-                ax : {} for ax in ["x", "y"]
-            }, 
-            "downsampled" : {
-                "cop" : {
-                    ax : {} for ax in ["x", "y"]
-                }
-            }      
-        }
-        gc = self.temp["f"]["gc_i"][0]
-        gc1 = self.temp["f"]["gc_i"][1]
-        t_off = self.temp["f"]["t_i"]
-        for ax in ["x", "y", "z"]:
-            forces[ax] = {}
-            for plate in np.arange(4):
-                forces[ax][plate] = self.subject.force[ax][plate][gc:gc1]
+    # def set_forces(self):
+    #     ds = 2 # downsample factor previously 10
+    #     forces = {
+    #         "cop" : {
+    #             ax : {} for ax in ["x", "y"]
+    #         }, 
+    #         "downsampled" : {
+    #             "cop" : {
+    #                 ax : {} for ax in ["x", "y"]
+    #             }
+    #         }      
+    #     }
+    #     gc = self.temp["f"]["gc_i"][0]
+    #     gc1 = self.temp["f"]["gc_i"][1]
+    #     t_off = self.temp["f"]["t_i"]
+    #     for ax in ["x", "y", "z"]:
+    #         forces[ax] = {}
+    #         for plate in np.arange(4):
+    #             forces[ax][plate] = self.subject.force[ax][plate][gc:gc1]
 
         
-        jump_inds = np.arange(gc, t_off+1)
-        plates = [[3, 2], [1, 0]]
-        for plate in np.arange(4):
-            v_force = self.subject.force["z"][plate][jump_inds] 
-            thresh = np.flatnonzero(v_force > 85)
+    #     jump_inds = np.arange(gc, t_off+1)
+    #     plates = [[3, 2], [1, 0]]
+    #     for plate in np.arange(4):
+    #         v_force = self.subject.force["z"][plate][jump_inds] 
+    #         thresh = np.flatnonzero(v_force > 85)
             
-            if len(thresh) > 2:
-                t_inds = thresh[0], thresh[-1]
-                conf_int = np.arange(t_inds[0], t_inds[1])
-                for ax in ["x", "y"]:
-                    ts = self.subject.force["cop"][ax][plate][jump_inds]
-                    forces["cop"][ax][plate] = np.pad(ts[conf_int], (thresh[0], len(ts)- thresh[-1]-1), mode="edge")
-                    forces["downsampled"]["cop"][ax][plate] = forces["cop"][ax][plate][::ds]
-            else:
-                for ax in ["x", "y"]:
-                    forces["cop"][ax][plate] = np.zeros(len(v_force))
-                    forces["downsampled"]["cop"][ax][plate] = np.zeros(int(len(v_force) // ds))
+    #         if len(thresh) > 2:
+    #             t_inds = thresh[0], thresh[-1]
+    #             conf_int = np.arange(t_inds[0], t_inds[1])
+    #             for ax in ["x", "y"]:
+    #                 ts = self.subject.force["cop"][ax][plate][jump_inds]
+    #                 forces["cop"][ax][plate] = np.pad(ts[conf_int], (thresh[0], len(ts)- thresh[-1]-1), mode="edge")
+    #                 forces["downsampled"]["cop"][ax][plate] = forces["cop"][ax][plate][::ds]
+    #         else:
+    #             for ax in ["x", "y"]:
+    #                 forces["cop"][ax][plate] = np.zeros(len(v_force))
+    #                 forces["downsampled"]["cop"][ax][plate] = np.zeros(int(len(v_force) // ds))
                 
         
                 
 
-        return forces
+    #     return forces
     
     def set_active_plates(self):
-        forces = np.vstack([self.forces["z"][pl] for pl in np.arange(4)])
-        return np.max(forces, axis=1) > 40
-    
-    def set_anat_locs(self, subj):
-        
-        j_inds = self.temp["t"]["j_inds"]
-        anat_locs = {
-            
-            "lat_mal" : {
-                side: {
-                    ax : subj.locs["lat_mal"][side][ax][j_inds] for ax in ["x", "y", "z"]
-                } for side in ["left", "right"] 
-            },
-            "med_mal": {
-                side: {
-                    ax : subj.locs["med_mal"][side][ax][j_inds] for ax in ["x", "y", "z"]
-                } for side in ["left", "right"] 
-            },
-            
-        }
-        return anat_locs
-    
-    def set_foot_dists(self):
-        # COP to malleolus in xy plane
-
-        # gc_inds = self.temp["t"]["gc_inds"]
-        
-        # #print()
-        # dists = {
-        #     mark : {
-        #         side : {
-        #             ax : self.forces["downsampled"]["cop"][ax][plate] - self.anat_locs[mark][side][ax][:len(self.forces["downsampled"]["cop"][ax][plate])] for ax in ["x", "y"]
-        #         } for side in ["left", "right"]
-        #     } for mark in ["med_mal", "lat_mal"]
-        # }
-        # for mark in ["med_mal", "lat_mal"]:
-        #     for side in ["left", "right"]:
-        #         for plate in np.arange(4):
-        #             dists[mark][side][plate]["xy"] = np.sqrt(dists[mark][side][plate]["x"]**2 + dists[mark][side][plate]["y"]**2)
-
-        # for side in ["left", "right"]:
-            
-        #     dists[side] = {}
-        #     for plate in np.arange(4):
-        #         #print(plate)
-        #         dists[side][plate] = {}
-        #         if plate in np.flatnonzero(self.active_plates):
-        #             a = dists["med_mal"][side][plate]["xy"]
-        #             b = dists["lat_mal"][side][plate]["xy"]
-        #             w = self.subject.locs["ank_w"][side]
-        #             if any(abs(a-b) > w-10):
-        #                 dists[side][plate]["h"] = np.nan
-        #                 continue
-        #             s = (a + b + w) / 2
-        #             try:
-        #                 h = np.sqrt(s*(s-a)*(s-b)*(s-w) *4 / (w**2))
-        #                 dists[side][plate]["h"] = h
-        #             except RuntimeWarning:
-        #                 #print(np.sqrt((self.subject.locs["med_malleolus"][side]["x"][gc_inds] - self.subject.locs["lat_mal"][side]["x"][gc_inds])**2 + (self.subject.locs["med_malleolus"][side]["y"][gc_inds] - self.subject.locs["lat_mal"][side]["y"][gc_inds])**2))
-        #                 print(side, plate)
-        #                 print(s[18], a[18], b[18], w)
-        #                 print(dists["med_mal"][side][plate]["x"][0], dists["lat_mal"][side][plate]["x"][0])
-        #                 print(dists["med_mal"][side][plate]["y"][0], dists["lat_mal"][side][plate]["y"][0])
-        #                 print(s*(s-a)*(s-b)*(s-w) *4 / (w**2))
-        #                 print(self.idx)
-        #                 print(self.gc_i[0]/2000)
-        #                 print(h)
-        #         else:
-        #             dists[side][plate]["h"] = np.nan
-                        
-            
-
-        #return dists
-        return np.nan
-
-    
+        inds = self.temp["f"]["j_inds"]
+        forces = np.vstack([self.subject.force["z"][pl][inds] for pl in np.arange(4)])
+        active = np.flatnonzero(np.max(forces, axis=1) > 50)
+        return active
     
     def set_gct(self):
-        return (self.t_i - self.gc_i[0]) / self.subject.fs_force # Ground Contact Time
+        return (self.t_i - self.gc_i[0]) / self.subject.time["force"]["fs"] # Ground Contact Time
     
     
     @property
@@ -631,15 +535,8 @@ class Jump:
     @property
     def rsi_m(self):
         return self.h_calc / self.gct
-    @property
-    def start_time(self):
-        return self.gc_i[0] / self.subject.time["force"]["fs"]
-    
-    @property
-    def ts_forces(self):
-        # weakness in that only z considered
-        inds = self.gc_i
-        return self.subject.ts_force[:, inds[0]:inds[1]]
+
+
     @property
     def agg_f_peak(self):
         return np.max(self.agg_f_series)    
@@ -649,58 +546,23 @@ class Jump:
     
     @property
     def peak_loc_time(self):
-        return self.peak_loc_ind / self.subject.fs_force
+        return self.peak_loc_ind / self.time["force"]["fs"]
     @property
     def peak_loc_rel(self):
         return self.peak_loc_time / self.gct
     
     def set_time(self):
         nPts = len(self.agg_f_series)
-        return np.linspace(0, self.gc_i[1] - self.gc_i[0] / self.subject.fs_force, nPts)
+        return np.linspace(0, (self.gc_i[1] - self.gc_i[0]) / self.subject.time["force"]["fs"], nPts)
     
-    def set_integ(self):
-        return np.trapz(self.agg_f_series, self.time)
-    @property
-    def integ_ecc(self):
-        return np.trapz(self.agg_f_series[:self.peak_loc_ind], self.time[:self.peak_loc_ind])
-    @property
-    def integ_conc(self):
-        return np.trapz(self.agg_f_series[self.peak_loc_ind:], self.time[self.peak_loc_ind:])
-    @property
-    def seq_idx(self):
-        if self.ft > 1: 
-            # Off the plate
-            return -1
-        elif self.gct > 0.5:
-            # On the ground too long
-            # Taking a break or fast SSC conditions lapsed
-            return 0
-        elif self.gct < 0.05 or self.ft < 0.05:
-            # Ground contact less than a 20th of a second
-            self.subject.outPutStr += "Force Plate fluctuation at {:.2f}\n".format(self.start_time)
-            return 0
-        else:
-            # seqIdx should increment in the future
-            return 1
-    
-
+    # def set_integ(self):
+    #     return np.trapz(self.agg_f_series, self.time)
     # @property
-    # def foot_dict(self):
-    #     trialdata = self.subject.trialdata
-        
-    #     toe_l_z = trialdata.ts("Acq", "Marker", "L.5MT")["Data"]["value"][:, 2]
-    #     foot_dict = {
-    #         "toe" : {
-    #             "l" : {
-    #                 "z" : {
-    #                     "ts" :  toe_l_z[self.gc_i[0]: self.gc_i[1]+1]
-    #                     "gc_min"
-    #                 }
-    #             }
-    #             "r" :
-    #         }
-    #     }
-       
+    # def integ_ecc(self):
+    #     return np.trapz(self.agg_f_series[:self.peak_loc_ind], self.time[:self.peak_loc_ind])
+    # @property
+    # def integ_conc(self):
+    #     return np.trapz(self.agg_f_series[self.peak_loc_ind:], self.time[self.peak_loc_ind:])
 
         
     def foot_angle(self):
@@ -718,25 +580,5 @@ class Jump:
             self.angle_dict["foot"][side]["landing2"] = ts_j[self.temp["t"]["j_l"]]
 
         
-            
-    def plot_jump(self, ax):
-        inds = np.arange(self.gc_i[0], self.gc_i[1])
-        F = self.subject.agg_f_z
-        ax.plot(inds, F[inds])
-        ax.text(0.5, 0.5, "Ground Contact Time: {:.1f} sec\nFlight Time: {:.1f} sec \nRSI: {:.0f}\nPeak Force = {:.0f} N"
-             .format(self.gct, self.ft, self.rsi, self.agg_f_peak),
-             horizontalalignment='left',
-             verticalalignment='center', transform=ax.transAxes)
-        plt.show()
+
     
-    def plot_heel(self, ax):
-        inds = np.arange(round(self.gc_i[0]/10), round(self.gc_i[1]/10))
-        S1 = self.subject.rheel[:, 2]
-        S2 = self.subject.lheel[:, 2]
-        ax.plot(inds, S1[inds], label="Right")
-        ax.plot(inds, S2[inds], label="Left")
-        ax.text(0.5, 0.5, "Ground Contact Time: {:.2f} sec\nFlight Time: {:.2f} sec \nRSI: {:.2f}\nPeak Force = {:.0f} N"
-             .format(self.gct, self.ft, self.rsi, self.agg_f_peak),
-             horizontalalignment='left',
-             verticalalignment='center', transform=ax.transAxes)
-        ax.legend()
