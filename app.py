@@ -37,7 +37,7 @@ if not os.path.exists(meta_path):
     output = meta_path
     gdown.download(url, output, quiet=False)
 
-if os.path.exists(data_path) and os.path.exists(stats_path and os.path.exists(meta_path)):
+if os.path.exists(data_path) and os.path.exists(stats_path) and os.path.exists(meta_path):
     print("Results successfully downloaded")
     with open(data_path, 'rb') as f:
         subjects = pickle.load(f)  # or use pd.read_pickle('data.pkl')
@@ -73,8 +73,12 @@ def get_results():
     ids = request.get_json()
     for df in res.keys():
         s_df = res[df]
-        s_df = s_df[s_df.index.isin(ids)].to_dict(orient="dict")
-        res[df] = s_df
+        #print(s_df.index.get_level_values("id").isin(ids))
+        #s_df = s_df[s_df.index.get_level_values("id").isin(ids)].reset_index().to_dict(orient="records")
+        out_dict = {
+            id : s_df.xs(id).to_dict(orient="index") for id in ids if id in s_df.index.get_level_values("id")
+        }
+        res[df] = out_dict
     return jsonify(res)
 
 @app.route('/api/download_csv/<id>/<features>')
