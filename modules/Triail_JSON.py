@@ -4,7 +4,10 @@ class Triail_JSON:
         self.path = subj.path
         # Can't contain trial data
         self.id = subj.id
-        self.output_str = subj.outPutStr
+        self.date = subj.date
+        self.pro = subj.pro
+        self.output_str = subj.outputStr
+        self.time = subj.time
 
         #self.force = subj.force # Too Many Samples
 
@@ -21,3 +24,6 @@ class Triail_JSON:
         # Plan an anthro dict in the future
         self.mass = subj.mass
         self.snapshot = subj.snapshot
+        if self.pro == "30":
+            self.start_inds, self.end_inds = subj.start_inds, subj.end_inds
+        self.stats = subj.stats

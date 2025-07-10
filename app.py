@@ -81,6 +81,18 @@ def get_results():
         res[df] = out_dict
     return jsonify(res)
 
+@app.route('/api/subjects/results/<feat>', methods=['POST'])
+def get_agg_res(feat):
+    print("Fetching results for feature:", feat)
+    body = request.get_json()
+    # Just get mean_start for now
+    f_series = stats["mean_start"].loc[body["ids"], feat]
+    out_dict = {
+        "mean": f_series.mean(),
+        "std": f_series.std(),
+    }
+    return jsonify(out_dict)
+
 @app.route('/api/download_csv/<id>/<features>')
 def download_csv(id, features):
     print(f"Downloading CSV for {id}")
@@ -114,23 +126,74 @@ def get_mass(id):
     return "{:.0f}".format(subj.mass)
 
 
-@app.route('/api/subjects/<id>/<features>')
-def get_subject(id, features):
-    print(f"Fetching {id}")
-    feats = features.split('--')
-    feats.insert(0, "idx")
-    feats.insert(0, "start_time")
-    
+@app.route('/api/<id>')
+def get_tests(id):
+    jump_dicts = {}
     for subj in subjects:
         if subj.id == id:
-            jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1] 
-            # ^ Note going through just the trial jumps
+            print(subj.date, subj.pro)
+            if subj.pro == "10":
+                jumps = subj.jumps
+                feats = stats["mean_trial"].keys()
+            elif subj.pro == "30":
+                jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
+                feats = stats["mean_start"].keys()
+            else:
+                print("Unknown protocol")
+                continue
+            feats = list(feats)
+            feats.append("idx")
+            feats.append("start_time")
+
             jump_dict = {
                 feat : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
                 for feat in feats
             }
-            return jump_dict
-    return {'error': 'Subject not found'}, 404
+            jump_dict["id"] = subj.id
+            jump_dict["mass"] = subj.mass
+            jump_dict["date"] = int(subj.date)
+            jump_dict["pro"] = subj.pro
+            jump_dict["trial_indices"] = [int(x) for x in subj.trial_indices]
+            jump_dict["stats"] = subj.stats
+            if subj.date not in jump_dicts:
+                jump_dicts[subj.date] = {}
+            jump_dicts[subj.date][subj.pro] = jump_dict
+    return jsonify(jump_dicts)
+
+@app.route('/api/<id>/<date>')
+def get_test(id, date):
+    jump_dicts = {}
+    for subj in subjects:
+        if subj.id == id and subj.date == date:
+            
+            if subj.pro == "10":
+                jumps = [jump for jIdx, jump in enumerate(subj.jumps) if jIdx in subj.trial_indices]
+                feats = stats["mean_trial"].keys()
+            elif subj.pro == "30":
+                jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
+                feats = stats["mean_start"].keys()
+            else:
+                print("Unknown protocol")
+                continue
+            feats = list(feats)
+            feats.append("idx")
+            feats.append("start_time")
+
+            jump_dict = {
+                feat : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
+                for feat in feats
+            }
+            jump_dict["id"] = subj.id
+            jump_dict["mass"] = subj.mass
+            jump_dict["date"] = int(subj.date)
+            jump_dict["pro"] = subj.pro
+            jump_dict["trial_indices"] = [int(x) for x in subj.trial_indices]
+            jump_dict["stats"] = subj.stats
+            jump_dicts[subj.date]= {
+                subj.pro: jump_dict
+            }
+    return jsonify(jump_dicts)
+
 
 
 
