@@ -93,17 +93,19 @@ def get_agg_res(feat):
     }
     return jsonify(out_dict)
 
-@app.route('/api/download_csv/<id>/<features>')
-def download_csv(id, features):
-    print(f"Downloading CSV for {id}")
-    feats = features.split('-')
+@app.route('/api/download_csv/', methods=['POST'])
+def download_csv():
+    data = request.get_json()
+    print("Downloading for {id}-{pro}-{date} with features: {features} and data", data)
+    id, features, pro, date = data["id"], data["features"], data["pro"], data["date"]
+    feats = features.split('--')
 
     for subj in subjects:
-        if subj.id == id:
+        if subj.id == id and subj.pro == pro and subj.date == date:
             
             jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
             jump_dict = {
-                feature_names[feat] : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
+                feat : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
                 for feat in feats
             }
             df = pd.DataFrame(jump_dict)
@@ -114,7 +116,7 @@ def download_csv(id, features):
             return Response(
                 output,
                 mimetype="text/csv",
-                headers={"Content-Disposition": "attachment;filename={}_{:.2f}kg.csv".format(id, subj.mass)}
+                headers={"Content-Disposition": "attachment;filename={}_{:.2f}kg.csv".format(id, float(subj.mass))}
             )
     return {'error': 'Subject not found'}, 404
 
