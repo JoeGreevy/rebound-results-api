@@ -37,7 +37,7 @@ def get_feat(jump, feat, jIdx):
         return t
     elif feat_arr[0] == "idx":
         return jIdx+1 # Truly awful, idx property should be set properly in data processing
-    elif feat_arr[0] in ["peak", "peak_loc", "vel_change", "avg_force", "avg_ecc", "avg_conc"]:
+    elif feat_arr[0] in ["peak", "peak_loc", "vel_change", "avg_force", "avg_ecc", "avg_conc", "peak_disp_val", "peak_disp_loc", "leg_stiffness"]:
         val = jump.force[feat]
         return val
     elif feat_arr[0] == "pow":

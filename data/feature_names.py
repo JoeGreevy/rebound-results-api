@@ -14,5 +14,8 @@ feature_names = {
     "vel_change" : "Velocity Change (m/s)", 
     "avg_ecc": "Average Eccentric Force (BW)", 
     "avg_conc": "Average Concentric Force (BW)",
+    "peak_disp_val": "Peak Displacement (m)",
+    "peak_disp_loc": "Peak Displacement Loc",
+    "leg_stiffness": "Leg Stiffness (kN/m)",
     "xxx": " "
 }

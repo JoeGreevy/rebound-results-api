@@ -271,8 +271,8 @@ class Jump:
                 side : {
                     "td" : ls[joint][side]["ang"][t_inds[0]],
                     "to" : ls[joint][side]["ang"][t_inds[-1]],
-                    "disp" : np.min(ls[joint][side]["ang"][t_inds]) - ls[joint][side]["ang"][t_inds[0]],
-                    "flex" : np.min(ls[joint][side]["ang"][t_inds]),
+                    "disp" : np.min(ls[joint][side]["ang"][t_inds]) - ls[joint][side]["ang"][t_inds[0]], # angular displacement
+                    "flex" : np.min(ls[joint][side]["ang"][t_inds]), # minimum angle
                 } for side in sides
             } for joint in joints
         }
@@ -312,15 +312,18 @@ class Jump:
         F = self.res_f[:N]
         peak, peak_loc = np.max(F), np.argmax(F)
         vel_change = np.cumsum(F) * (1/2000) / self.subject.mass
-        v_avg = np.sum(vel_change)/len(vel_change) # average velocity change
-        com_change = self.kinetics["stiffness"]["leg"]["th_land_off"]
-        # notation is aotp
-        v_off = com_change / time # velocity at takeoff
-        v = vel_change - v_avg + v_off # v = v(0) + vel_change ||| v(0) = v_off - v_avg
+        v0 = -np.mean(vel_change)
+        ## 30/07/25: Reverted to standard method
+        # v_avg = np.sum(vel_change)/len(vel_change) # average velocity change
+        # com_change = self.kinetics["stiffness"]["leg"]["th_land_off"]
+        # # notation is aotp
+        # v_off = com_change / time # velocity at takeoff
+        # v = vel_change - v_avg + v_off # v = v(0) + vel_change ||| v(0) = v_off - v_avg
+        v = v0 + vel_change
         self.v = v
         peak_disp_ind = np.flatnonzero(v > 0)[0]
         peak_disp_loc = peak_disp_ind / N
-        peak_disp = np.trapz(v[:peak_disp_ind], dx=1/2000) # m
+        peak_disp = -1*np.trapz(v[:peak_disp_ind], dx=1/2000) # m
 
         # Eccentric Proportion was a stupid methric, just capturing that 
         # subjects tend to take off with less kinetic energy that they land with.
@@ -350,7 +353,8 @@ class Jump:
             "peak_loc" : peak_loc / N,
             "vel_change": vel_change[-1],
             "peak_disp_val" : peak_disp,
-            "peak_disp" : peak_disp_loc,
+            "peak_disp_loc" : peak_disp_loc,
+            "leg_stiffness" : peak / peak_disp,
             "avg_force": np.mean(F) / (self.subject.mass * 9.81),
             "avg_ecc" : avg_ecc/ (self.subject.mass * 9.81),
             "avg_conc" : avg_conc / (self.subject.mass * 9.81),
@@ -363,7 +367,7 @@ class Jump:
 
 
     def set_agg_f_series(self):
-        inds = self.gc_i
+        inds = self.gc_i[0], self.t_i + 1
         return self.subject.force["z"]["agg"][inds[0]:inds[1]]
     
     def set_ft(self):
@@ -553,7 +557,7 @@ class Jump:
     
     def set_time(self):
         nPts = len(self.agg_f_series)
-        return np.linspace(0, (self.gc_i[1] - self.gc_i[0]) / self.subject.time["force"]["fs"], nPts)
+        return np.linspace(0, nPts / self.subject.time["force"]["fs"], nPts)
     
     # def set_integ(self):
     #     return np.trapz(self.agg_f_series, self.time)

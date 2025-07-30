@@ -6,7 +6,7 @@ class Triail_JSON:
         self.id = subj.id
         self.date = subj.date
         self.pro = subj.pro
-        self.output_str = subj.outputStr
+        self.output_str = subj.output_str
         self.time = subj.time
 
         #self.force = subj.force # Too Many Samples
