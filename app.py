@@ -102,12 +102,20 @@ def download_csv():
 
     for subj in subjects:
         if subj.id == id and subj.pro == pro and subj.date == date:
-            
-            jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
+            if pro == "30":
+                jumps = subj.jumps[subj.trial_indices[0]:subj.trial_indices[1]+1]
+            else:
+                jumps = subj.jumps
             jump_dict = {
                 feat : [get_feat(jump, feat, jIdx) for (jIdx, jump) in enumerate(jumps)]
                 for feat in feats
             }
+            jump_dict["included"] = np.zeros(len(jumps))
+            if pro == "30":
+                jump_dict["included"][subj.start_inds] = 1
+                jump_dict["included"][subj.end_inds] = 2
+            else:
+                jump_dict["included"][subj.trial_indices] = 1
             df = pd.DataFrame(jump_dict)
 
             output = io.StringIO()
@@ -156,6 +164,9 @@ def get_tests(id):
             jump_dict["date"] = int(subj.date)
             jump_dict["pro"] = subj.pro
             jump_dict["trial_indices"] = [int(x) for x in subj.trial_indices]
+            if subj.pro == "30":
+                jump_dict["start_inds"] = subj.start_inds.tolist()
+                jump_dict["end_inds"] = subj.end_inds.tolist()
             jump_dict["stats"] = subj.stats
             if subj.date not in jump_dicts:
                 jump_dicts[subj.date] = {}
